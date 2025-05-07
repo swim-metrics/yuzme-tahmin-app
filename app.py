@@ -1,92 +1,75 @@
+
 import streamlit as st
-import pickle
+import pandas as pd
 import numpy as np
+import pickle
+import os
 
-# Modeli yukleme fonksiyonu
-def load_model(style):
-    model_path = f"{style.lower()}_model.pkl"
-    with open(model_path, "rb") as file:
-        model = pickle.load(file)
-    return model
+# Başlık
+st.set_page_config(page_title="Yüzme Performans Tahmin Uygulaması", layout="centered")
 
-def main():
-    st.set_page_config(page_title="50m Swimming Time Prediction", page_icon="🏊")
+st.title("🏊‍♂️ Yüzme Performans Tahmini (50m)")
+st.markdown("Bu uygulama yaş, boy, kilo, cinsiyet ve performans ölçümleri ile 50m yüzme süresini tahmin eder.")
 
-    # Dil Seçimi
-    language = st.radio("Select Language / Dil Seçiniz:", ("English", "Türkçe"))
+# Sabit girişler
+col1, col2 = st.columns(2)
+with col1:
+    age = st.number_input("Yaş", min_value=10, max_value=25, value=13)
+    height = st.number_input("Boy (cm)", min_value=120, max_value=220, value=160)
+with col2:
+    weight = st.number_input("Kilo (kg)", min_value=30, max_value=120, value=50)
+    gender = st.selectbox("Cinsiyet", options=["Kadın", "Erkek"])
 
-    # Başlık
-    if language == "Türkçe":
-        st.title("50m Yüzme Süre Tahmini")
-    else:
-        st.title("50m Swimming Time Prediction")
+# Stil ve yaş grubu seçimi
+style = st.selectbox("Yüzme Stili", ["Serbest", "Sırtüstü", "Kurbağalama", "Kelebek"])
+age_group = st.selectbox("Yaş Grubu", ["12_13", "14_15", "16_17"])
 
-    # Ortak alanlar
-    gender = st.selectbox("Cinsiyet (0 = Kadın, 1 = Erkek):" if language == "Türkçe" else "Gender (0 = Female, 1 = Male):", [0,1])
-    age = st.number_input("Yaş:" if language == "Türkçe" else "Age:", min_value=5, max_value=100, value=15)
-    weight = st.number_input("Vücut Ağırlığı (kg):" if language == "Türkçe" else "Weight (kg):", min_value=20, max_value=200, value=50)
-    height = st.number_input("Boy Uzunluğu (cm):" if language == "Türkçe" else "Height (cm):", min_value=100, max_value=220, value=160)
+# Model adı oluştur
+model_filename = f"model1_{'kadin' if gender=='Kadın' else 'erkek'}_{age_group}_{style.lower()}_model.pkl"
+model_path = os.path.join("model_dosyalar", model_filename)
 
-    # Stil Seçimi
-    if language == "Türkçe":
-        style = st.selectbox("Hangi Yüzme Stilinde Tahmin Yapmak İstersiniz?", ("Serbest", "Sırtüstü", "Kurbagalama", "Kelebek"))
-    else:
-        style = st.selectbox("Which Swimming Style Do You Want to Predict?", ("Freestyle", "Backstroke", "Breaststroke", "Butterfly"))
+# SHAP eşleme dosyasını yükle
+mapping_path = os.path.join("model_dosyalar", "shap_features_mapping.pkl")
+try:
+    with open(mapping_path, "rb") as f:
+        shap_features = pickle.load(f)
+except:
+    st.error("SHAP eşleme dosyası bulunamadı.")
+    st.stop()
 
-    # Ölçüm Verileri
-    if style in ["Serbest", "Freestyle"]:
-        hand_length = st.number_input("El Uzunluğu (cm):" if language == "Türkçe" else "Hand Length (cm):", value=18.0)
-        vertical_jump = st.number_input("Dikey Sıçrama Yüksekliği (cm):" if language == "Türkçe" else "Vertical Jump Height (cm):", value=35)
-        standing_long_jump = st.number_input("Ayakta Uzun Atlama Mesafesi (cm):" if language == "Türkçe" else "Standing Long Jump Distance (cm):", value=160)
-        bent_arm_hang = st.number_input("Bükülü Kol Asılı Kalma (s):" if language == "Türkçe" else "Bent Arm Hang (s):", value=20)
-        situp_test = st.number_input("Bir Dakikada Mekik Testi (tekrar):" if language == "Türkçe" else "Sit-up Test (reps):", value=30)
-        cooper_test = st.number_input("12 Dakika Cooper Koşusu (m):" if language == "Türkçe" else "12-Minute Cooper Test (m):", value=1600)
+# Model yükle
+try:
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+except:
+    st.error(f"Model dosyası bulunamadı: {model_filename}")
+    st.stop()
 
-        input_data = np.array([[gender, age, weight, height, hand_length, vertical_jump, standing_long_jump, bent_arm_hang, situp_test, cooper_test]])
+# SHAP girişleri
+user_inputs = {}
+st.subheader("📊 Performans Ölçümleri")
+for feat in shap_features.get(model_filename, []):
+    user_inputs[feat] = st.number_input(f"{feat}", value=0.0)
 
-    elif style in ["Sırtüstü", "Backstroke"]:
-        hand_length = st.number_input("El Uzunluğu (cm):" if language == "Türkçe" else "Hand Length (cm):", value=18.0)
-        chest_circumference = st.number_input("Göğüs Çevresi (cm):" if language == "Türkçe" else "Chest Circumference (cm):", value=85)
-        standing_long_jump = st.number_input("Ayakta Uzun Atlama Mesafesi (cm):" if language == "Türkçe" else "Standing Long Jump Distance (cm):", value=160)
-        bent_arm_hang = st.number_input("Bükülü Kol Asılı Kalma (s):" if language == "Türkçe" else "Bent Arm Hang (s):", value=20)
-        shoulder_flexibility = st.number_input("Omuz Esnekliği (cm):" if language == "Türkçe" else "Shoulder Flexibility (cm):", value=30)
-        ankle_flexibility = st.number_input("Ayak Bileği Esnekliği (derece):" if language == "Türkçe" else "Ankle Flexibility (degree):", value=90)
+# Tahmin butonu
+if st.button("Tahmin Et"):
+    try:
+        # Veri çerçevesi oluştur
+        df_input = pd.DataFrame([{
+            "Yaş": age,
+            "Boy": height,
+            "Kilo": weight,
+            "Grup_Kod": 0 if gender == "Kadın" else 1,
+            **user_inputs
+        }])
 
-        input_data = np.array([[gender, age, weight, height, hand_length, chest_circumference, standing_long_jump, bent_arm_hang, shoulder_flexibility, ankle_flexibility]])
+        # Sıralama garantisi
+        model_features = model.get_booster().feature_names
+        df_input = df_input[model_features]
 
-    elif style in ["Kurbagalama", "Breaststroke"]:
-        foot_length = st.number_input("Ayak Uzunluğu (cm):" if language == "Türkçe" else "Foot Length (cm):", value=22)
-        vertical_jump = st.number_input("Dikey Sıçrama Yüksekliği (cm):" if language == "Türkçe" else "Vertical Jump Height (cm):", value=30)
-        standing_long_jump = st.number_input("Ayakta Uzun Atlama Mesafesi (cm):" if language == "Türkçe" else "Standing Long Jump Distance (cm):", value=160)
-        bent_arm_hang = st.number_input("Bükülü Kol Asılı Kalma (s):" if language == "Türkçe" else "Bent Arm Hang (s):", value=20)
-        situp_test = st.number_input("Bir Dakikada Mekik Testi (tekrar):" if language == "Türkçe" else "Sit-up Test (reps):", value=30)
-        cooper_test = st.number_input("12 Dakika Cooper Koşusu (m):" if language == "Türkçe" else "12-Minute Cooper Test (m):", value=1600)
+        # Tahmin
+        prediction = model.predict(df_input)[0]
+        st.success(f"Tahmini 50m Yüzme Süresi: {round(prediction, 2)} saniye")
 
-        input_data = np.array([[gender, age, weight, height, foot_length, vertical_jump, standing_long_jump, bent_arm_hang, situp_test, cooper_test]])
-
-    elif style in ["Kelebek", "Butterfly"]:
-        hand_length = st.number_input("El Uzunluğu (cm):" if language == "Türkçe" else "Hand Length (cm):", value=18.0)
-        vertical_jump = st.number_input("Dikey Sıçrama Yüksekliği (cm):" if language == "Türkçe" else "Vertical Jump Height (cm):", value=35)
-        standing_long_jump = st.number_input("Ayakta Uzun Atlama Mesafesi (cm):" if language == "Türkçe" else "Standing Long Jump Distance (cm):", value=160)
-        bent_arm_hang = st.number_input("Bükülü Kol Asılı Kalma (s):" if language == "Türkçe" else "Bent Arm Hang (s):", value=20)
-        shoulder_flexibility = st.number_input("Omuz Esnekliği (cm):" if language == "Türkçe" else "Shoulder Flexibility (cm):", value=30)
-        cooper_test = st.number_input("12 Dakika Cooper Koşusu (m):" if language == "Türkçe" else "12-Minute Cooper Test (m):", value=1600)
-
-        input_data = np.array([[gender, age, weight, height, hand_length, vertical_jump, standing_long_jump, bent_arm_hang, shoulder_flexibility, cooper_test]])
-
-    # Tahmin Butonu
-    if st.button("Süreyi Tahmin Et" if language == "Türkçe" else "Predict Time"):
-        try:
-            model = load_model(style.split(" ")[0])  # stil adından ilk kelimeyi al
-            prediction = model.predict(input_data)
-
-            if language == "Türkçe":
-                st.success(f"50m Yüzme Süre Tahmininiz: {prediction[0]:.2f} saniye")
-            else:
-                st.success(f"Predicted 50m Swimming Time: {prediction[0]:.2f} seconds")
-
-        except Exception as e:
-            st.error(f"Bir hata oluştu: {str(e)}")
-
-if __name__ == "__main__":
-    main()
+    except Exception as e:
+        st.error(f"Hata oluştu: {e}")
